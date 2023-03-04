@@ -6,7 +6,6 @@
 #include <Databases/DatabaseMemory.h>
 #include <Databases/DatabaseOnDisk.h>
 #include <Disks/IDisk.h>
-#include "Common/Exception.h"
 #include <Common/quoteString.h>
 #include <Storages/StorageMemory.h>
 #include <Core/BackgroundSchedulePool.h>
@@ -21,9 +20,7 @@
 #include <Common/noexcept_scope.h>
 #include <Common/checkStackSize.h>
 
-#include "Storages/IStorage_fwd.h"
 #include "config.h"
-#include <filesystem>
 #include <regex>
 
 #if USE_MYSQL
@@ -55,9 +52,7 @@ namespace ErrorCodes
     extern const int DATABASE_ACCESS_DENIED;
     extern const int LOGICAL_ERROR;
     extern const int HAVE_DEPENDENT_OBJECTS;
-    extern const int FILE_DOESNT_EXIST;
     extern const int FS_METADATA_ERROR;
-    extern const int NOT_IMPLEMENTED;
 }
 
 TemporaryTableHolder::TemporaryTableHolder(ContextPtr context_, const TemporaryTableHolder::Creator & creator, const ASTPtr & query)
