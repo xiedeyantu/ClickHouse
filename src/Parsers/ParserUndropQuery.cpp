@@ -1,0 +1,78 @@
+#include <Parsers/ASTUndropQuery.h>
+
+#include <Parsers/CommonParsers.h>
+#include <Parsers/ParserUndropQuery.h>
+#include "Parsers/ASTLiteral.h"
+
+
+namespace DB
+{
+
+namespace
+{
+
+bool parseUndropQuery(IParser::Pos & pos, ASTPtr & node, Expected & expected)
+{
+    ParserKeyword s_table("TABLE");
+    ParserToken s_dot(TokenType::Dot);
+    ParserIdentifier name_p(true);
+
+    ASTPtr database;
+    ASTPtr table;
+    String cluster_str;
+    UUID uuid = UUIDHelpers::Nil;
+
+    if (!s_table.ignore(pos, expected))
+        return false;
+    if (!name_p.parse(pos, table, expected))
+        return false;
+    if (s_dot.ignore(pos, expected))
+    {
+        database = table;
+        if (!name_p.parse(pos, table, expected))
+            return false;
+    }
+    if (ParserKeyword("UUID").ignore(pos, expected))
+    {
+        ParserStringLiteral uuid_p;
+        ASTPtr ast_uuid;
+        if (!uuid_p.parse(pos, ast_uuid, expected))
+            return false;
+        uuid = parseFromString<UUID>(ast_uuid->as<ASTLiteral>()->value.get<String>());
+    }
+    if (ParserKeyword{"ON"}.ignore(pos, expected))
+    {
+        if (!ASTQueryWithOnCluster::parse(pos, cluster_str, expected))
+            return false;
+    }
+    auto query = std::make_shared<ASTUndropQuery>();
+    node = query;
+
+    query->database = database;
+    query->table = table;
+    query->uuid = uuid;
+
+    if (database)
+        query->children.push_back(database);
+
+    if (table)
+        query->children.push_back(table);
+
+    query->cluster = cluster_str;
+
+    return true;
+}
+
+}
+
+bool ParserUndropQuery::parseImpl(Pos & pos, ASTPtr & node, Expected & expected)
+{
+    ParserKeyword s_drop("UNDROP");
+
+    if (s_drop.ignore(pos, expected))
+        return parseUndropQuery(pos, node, expected);
+    else
+        return false;
+}
+
+}

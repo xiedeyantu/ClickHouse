@@ -1,0 +1,46 @@
+test MergeTree undrop
+TablesToDropQueueSize	1
+TablesToDropQueueSize	0
+1
+2
+3
+test MergeTree with uuid
+TablesToDropQueueSize	1
+TablesToDropQueueSize	0
+1
+2
+3
+test MergeTree on cluster
+TablesToDropQueueSize	1
+TablesToDropQueueSize	0
+1
+2
+3
+test ReplicatedMergeTree undrop
+TablesToDropQueueSize	1
+TablesToDropQueueSize	0
+1
+2
+3
+test Memory undrop
+TablesToDropQueueSize	0
+TablesToDropQueueSize	0
+test Log undrop
+TablesToDropQueueSize	1
+TablesToDropQueueSize	0
+1
+2
+3
+test Distributed undrop
+TablesToDropQueueSize	1
+TablesToDropQueueSize	0
+test_25338_undrop_d
+test MergeTree drop and undrop multiple times
+0
+TablesToDropQueueSize	1
+0
+TablesToDropQueueSize	2
+0
+TablesToDropQueueSize	3
+TablesToDropQueueSize	2
+3

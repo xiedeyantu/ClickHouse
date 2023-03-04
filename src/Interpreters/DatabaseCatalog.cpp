@@ -6,6 +6,7 @@
 #include <Databases/DatabaseMemory.h>
 #include <Databases/DatabaseOnDisk.h>
 #include <Disks/IDisk.h>
+#include "Common/Exception.h"
 #include <Common/quoteString.h>
 #include <Storages/StorageMemory.h>
 #include <Core/BackgroundSchedulePool.h>
@@ -20,7 +21,10 @@
 #include <Common/noexcept_scope.h>
 #include <Common/checkStackSize.h>
 
+#include "Storages/IStorage_fwd.h"
 #include "config.h"
+#include <filesystem>
+#include <regex>
 
 #if USE_MYSQL
 #    include <Databases/MySQL/MaterializedMySQLSyncThread.h>
@@ -51,6 +55,9 @@ namespace ErrorCodes
     extern const int DATABASE_ACCESS_DENIED;
     extern const int LOGICAL_ERROR;
     extern const int HAVE_DEPENDENT_OBJECTS;
+    extern const int FILE_DOESNT_EXIST;
+    extern const int FS_METADATA_ERROR;
+    extern const int NOT_IMPLEMENTED;
 }
 
 TemporaryTableHolder::TemporaryTableHolder(ContextPtr context_, const TemporaryTableHolder::Creator & creator, const ASTPtr & query)
@@ -862,6 +869,13 @@ String DatabaseCatalog::getPathForDroppedMetadata(const StorageID & table_id) co
            toString(table_id.uuid) + ".sql";
 }
 
+String DatabaseCatalog::getPathForMetadata(const StorageID & table_id) const
+{
+    return getContext()->getPath() + "metadata/" +
+           escapeForFileName(table_id.getDatabaseName()) + "/" +
+           escapeForFileName(table_id.getTableName()) + ".sql";
+}
+
 void DatabaseCatalog::enqueueDroppedTableCleanup(StorageID table_id, StoragePtr table, String dropped_metadata_path, bool ignore_delay)
 {
     assert(table_id.hasUUID());
@@ -929,6 +943,100 @@ void DatabaseCatalog::enqueueDroppedTableCleanup(StorageID table_id, StoragePtr 
         (*drop_task)->schedule();
 }
 
+void DatabaseCatalog::dequeueDroppedTableCleanup(StorageID table_id)
+{
+    String latest_metadata_dropped_path;
+    String table_metadata_path;
+    StorageID droped_table_id = table_id;
+    TablesMarkedAsDropped::iterator table; 
+    {
+        std::lock_guard lock(tables_marked_dropped_mutex);
+        table = tables_marked_dropped.end();
+        time_t latest_drop_time = std::numeric_limits<time_t>::min();
+        for (auto it = tables_marked_dropped.begin(); it != tables_marked_dropped.end(); ++it)
+        {
+            if (it->table_id.uuid == table_id.uuid)
+            {
+                table = it;
+                break;
+            }
+            
+            if (it->table_id.table_name == table_id.table_name &&
+                it->table_id.table_name == table_id.table_name &&
+                it->drop_time > latest_drop_time)
+            {
+                latest_drop_time = it->drop_time;
+                table = it;
+            }
+        }
+
+        if (table == tables_marked_dropped.end())
+            throw Exception(ErrorCodes::UNKNOWN_TABLE,
+                "The drop task of table {} is in progress or has been dropped or has not metadata file, like Memory engine",
+                table_id.getNameForLogs());
+
+        latest_metadata_dropped_path = table->metadata_path;
+        droped_table_id = table->table_id;
+        table_metadata_path = getPathForMetadata(droped_table_id);
+
+        tables_marked_dropped.erase(table);
+        if (tables_marked_dropped_ids.contains(droped_table_id.uuid))
+            tables_marked_dropped_ids.erase(droped_table_id.uuid);
+
+        fs::rename(latest_metadata_dropped_path, table_metadata_path);
+    }
+
+    LOG_INFO(log, "Trying Undrop table {} from {}", droped_table_id.getNameForLogs(), latest_metadata_dropped_path);
+
+    auto enqueue = [&]()
+    {
+        std::lock_guard lock(tables_marked_dropped_mutex);
+        tables_marked_dropped.emplace_back(*table);
+        tables_marked_dropped_ids.insert(droped_table_id.uuid);
+        CurrentMetrics::add(CurrentMetrics::TablesToDropQueueSize, 1);
+    };
+
+    auto local_context = getContext();
+    ASTPtr ast = DatabaseOnDisk::parseQueryFromMetadata(
+        log, local_context, table_metadata_path, /*throw_on_error*/ true, /*remove_empty*/ false);
+    auto * create = typeid_cast<ASTCreateQuery *>(ast.get());
+    if (!create)
+    {
+        enqueue();
+        throw Exception(
+            ErrorCodes::FS_METADATA_ERROR,
+            "Cannot parse metadata of table {} from {}", 
+            droped_table_id.getNameForLogs(),
+            table_metadata_path);
+    }
+
+    String data_path = "store/" + getPathForUUID(droped_table_id.uuid);
+    create->setDatabase(droped_table_id.database_name);
+    create->setTable(droped_table_id.table_name);
+    try
+    {
+        auto storage = createTableFromAST(
+            *create,
+            droped_table_id.getDatabaseName(),
+            data_path,
+            local_context,
+            /* force_restore */ true).second;
+
+        auto database = getDatabase(droped_table_id.database_name, local_context);
+        database->attachTable(local_context, droped_table_id.table_name, storage, database->getTableDataPath(*create));
+        CurrentMetrics::sub(CurrentMetrics::TablesToDropQueueSize, 1);
+    }
+    catch (...)
+    {
+        enqueue();
+        throw Exception(
+            ErrorCodes::FS_METADATA_ERROR,
+            "Cannot undrop table {} from {}", 
+            droped_table_id.getNameForLogs(),
+            table_metadata_path);
+    }
+}
+
 void DatabaseCatalog::dropTableDataTask()
 {
     /// Background task that removes data of tables which were marked as dropped by Atomic databases.
@@ -941,7 +1049,8 @@ void DatabaseCatalog::dropTableDataTask()
     try
     {
         std::lock_guard lock(tables_marked_dropped_mutex);
-        assert(!tables_marked_dropped.empty());
+        if (tables_marked_dropped.empty())
+            return;
         time_t current_time = std::chrono::system_clock::to_time_t(std::chrono::system_clock::now());
         time_t min_drop_time = std::numeric_limits<time_t>::max();
         size_t tables_in_use_count = 0;
