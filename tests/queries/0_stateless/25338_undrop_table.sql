@@ -1,5 +1,6 @@
--- Tags: no-parallel
+-- Tags: no-parallel, distributed, zookeeper
 
+-- { echo }
 select 'test MergeTree undrop';
 drop table if exists test_25338_undrop sync;
 create table test_25338_undrop (id Int32) Engine=MergeTree() order by id;
@@ -60,7 +61,7 @@ select * from test_25338_undrop order by id;
 drop table test_25338_undrop sync;
 
 select 'test Distributed undrop';
-create table test_25338_undrop_d (id Int32) Engine = Distributed(test_cluster_two_shards, default, test_25338_undrop, rand());
+create table test_25338_undrop_d (id Int32) Engine = Distributed(test_cluster_two_shards, currentDatabase(), test_25338_undrop, rand());
 drop table test_25338_undrop_d;
 select metric,value from system.metrics where metric = 'TablesToDropQueueSize';
 undrop table test_25338_undrop_d;
