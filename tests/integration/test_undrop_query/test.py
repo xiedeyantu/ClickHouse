@@ -80,7 +80,7 @@ def test_undrop_MergeTree_on_cluster(started_cluster):
             "select value from system.metrics where metric = 'TablesToDropQueueSize';"
         )
         == "1\n"
-     )
+    )
     node1.query("undrop table test_25338_undrop on cluster test_cluster;")
     assert (
         node1.query(
@@ -113,6 +113,7 @@ def test_undrop_ReplicatedMergeTree(started_cluster):
     )
     assert node1.query("select * from test_25338_undrop order by id;") == "1\n2\n3\n"
     node1.query("drop table test_25338_undrop sync;")
+
 
 def test_undrop_Memory(started_cluster):
     node1.query("create table test_25338_undrop (id Int32) Engine=Memory();")
@@ -167,6 +168,7 @@ def test_undrop_Distributed(started_cluster):
         == "test_25338_undrop_d\n"
     )
     node1.query("drop table test_25338_undrop_d sync;")
+
 
 def test_undrop_drop_and_undrop_multiple_times(started_cluster):
     node1.query(
