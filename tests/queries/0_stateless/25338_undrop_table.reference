@@ -1,46 +1,128 @@
+-- { echo }
+select 'test MergeTree undrop';
 test MergeTree undrop
+drop table if exists test_25338_undrop sync;
+create table test_25338_undrop (id Int32) Engine=MergeTree() order by id;
+insert into test_25338_undrop values (1),(2),(3);
+drop table test_25338_undrop;
+select metric,value from system.metrics where metric = 'TablesToDropQueueSize';
 TablesToDropQueueSize	1
+undrop table test_25338_undrop;
+select metric,value from system.metrics where metric = 'TablesToDropQueueSize';
 TablesToDropQueueSize	0
+select * from test_25338_undrop order by id;
 1
 2
 3
+drop table test_25338_undrop sync;
+select 'test MergeTree with uuid';
 test MergeTree with uuid
+create table test_25338_undrop UUID '3719b97a-fc7c-4bb1-84c0-a9906006fb88' (id Int32) Engine=MergeTree() order by id;
+insert into test_25338_undrop values (1),(2),(3);
+drop table test_25338_undrop;
+select metric,value from system.metrics where metric = 'TablesToDropQueueSize';
 TablesToDropQueueSize	1
+undrop table test_25338_undrop UUID '3719b97a-fc7c-4bb1-84c0-a9906006fb88';
+select metric,value from system.metrics where metric = 'TablesToDropQueueSize';
 TablesToDropQueueSize	0
+select * from test_25338_undrop order by id;
 1
 2
 3
+drop table test_25338_undrop sync;
+select 'test MergeTree on cluster';
 test MergeTree on cluster
+create table test_25338_undrop on cluster test_cluster_two_shards (id Int32) Engine=MergeTree() order by id format Null;
+insert into test_25338_undrop values (1),(2),(3);
+drop table test_25338_undrop on cluster test_cluster_two_shards format Null;
+select metric,value from system.metrics where metric = 'TablesToDropQueueSize';
 TablesToDropQueueSize	1
+undrop table test_25338_undrop on cluster test_cluster_two_shards format Null;
+select metric,value from system.metrics where metric = 'TablesToDropQueueSize';
 TablesToDropQueueSize	0
+select * from test_25338_undrop order by id;
 1
 2
 3
+drop table test_25338_undrop on cluster test_cluster_two_shards sync format Null;
+select 'test ReplicatedMergeTree undrop';
 test ReplicatedMergeTree undrop
+create table test_25338_undrop (id Int32) Engine=ReplicatedMergeTree('/clickhouse/tables/1/test_25338_undrop', '1') order by id;
+insert into test_25338_undrop values (1),(2),(3);
+drop table test_25338_undrop;
+select metric,value from system.metrics where metric = 'TablesToDropQueueSize';
 TablesToDropQueueSize	1
+undrop table test_25338_undrop;
+select metric,value from system.metrics where metric = 'TablesToDropQueueSize';
 TablesToDropQueueSize	0
+select * from test_25338_undrop order by id;
 1
 2
 3
+drop table test_25338_undrop sync;
+select 'test Memory undrop';
 test Memory undrop
+create table test_25338_undrop (id Int32) Engine=Memory();
+insert into test_25338_undrop values (1),(2),(3);
+drop table test_25338_undrop;
+select metric,value from system.metrics where metric = 'TablesToDropQueueSize';
 TablesToDropQueueSize	0
+undrop table test_25338_undrop; -- { serverError 60 }
+select metric,value from system.metrics where metric = 'TablesToDropQueueSize';
 TablesToDropQueueSize	0
+select 'test Log undrop';
 test Log undrop
+create table test_25338_undrop (id Int32) Engine=Log();
+insert into test_25338_undrop values (1),(2),(3);
+drop table test_25338_undrop;
+select metric,value from system.metrics where metric = 'TablesToDropQueueSize';
 TablesToDropQueueSize	1
+undrop table test_25338_undrop;
+select metric,value from system.metrics where metric = 'TablesToDropQueueSize';
 TablesToDropQueueSize	0
+select * from test_25338_undrop order by id;
 1
 2
 3
+drop table test_25338_undrop sync;
+select 'test Distributed undrop';
 test Distributed undrop
+create table test_25338_undrop_d (id Int32) Engine = Distributed(test_cluster_two_shards, currentDatabase(), test_25338_undrop, rand());
+drop table test_25338_undrop_d;
+select metric,value from system.metrics where metric = 'TablesToDropQueueSize';
 TablesToDropQueueSize	1
+undrop table test_25338_undrop_d;
+select metric,value from system.metrics where metric = 'TablesToDropQueueSize';
 TablesToDropQueueSize	0
+select table from system.tables where table='test_25338_undrop_d';
 test_25338_undrop_d
+select 'test MergeTree drop and undrop multiple times';
 test MergeTree drop and undrop multiple times
+create table test_25338_undrop (id Int32) Engine=MergeTree() order by id;
+insert into test_25338_undrop values (1);
+drop table test_25338_undrop;
+select sleep(1);
 0
+select metric,value from system.metrics where metric = 'TablesToDropQueueSize';
 TablesToDropQueueSize	1
+create table test_25338_undrop (id Int32) Engine=MergeTree() order by id;
+insert into test_25338_undrop values (2);
+drop table test_25338_undrop;
+select sleep(1);
 0
+select metric,value from system.metrics where metric = 'TablesToDropQueueSize';
 TablesToDropQueueSize	2
+create table test_25338_undrop (id Int32) Engine=MergeTree() order by id;
+insert into test_25338_undrop values (3);
+drop table test_25338_undrop;
+select sleep(1);
 0
+select metric,value from system.metrics where metric = 'TablesToDropQueueSize';
 TablesToDropQueueSize	3
+undrop table test_25338_undrop;
+select metric,value from system.metrics where metric = 'TablesToDropQueueSize';
 TablesToDropQueueSize	2
+select * from test_25338_undrop order by id;
 3
+undrop table test_25338_undrop; -- { serverError 57 }
+drop table test_25338_undrop sync;
