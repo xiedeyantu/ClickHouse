@@ -11,6 +11,7 @@ namespace DB
 
 namespace ErrorCodes
 {
+    extern const int LOGICAL_ERROR;
     extern const int TABLE_ALREADY_EXISTS;
 }
 
@@ -32,7 +33,7 @@ BlockIO InterpreterUndropQuery::execute()
     if (undrop.table)
         return executeToTable(undrop);
     else
-        throw Exception(ErrorCodes::LOGICAL_ERROR, "Nothing to drop, both names are empty");
+        throw Exception(ErrorCodes::LOGICAL_ERROR, "Nothing to undrop, both names are empty");
 }
 
 BlockIO InterpreterUndropQuery::executeToTable(ASTUndropQuery & query)

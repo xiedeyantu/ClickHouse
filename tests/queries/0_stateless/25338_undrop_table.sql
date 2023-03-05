@@ -1,4 +1,5 @@
 select 'test MergeTree undrop';
+drop table if exists test_25338_undrop sync;
 create table test_25338_undrop (id Int32) Engine=MergeTree() order by id;
 insert into test_25338_undrop values (1),(2),(3);
 drop table test_25338_undrop;

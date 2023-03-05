@@ -943,7 +943,7 @@ void DatabaseCatalog::dequeueDroppedTableCleanup(StorageID table_id)
     String latest_metadata_dropped_path;
     String table_metadata_path;
     StorageID droped_table_id = table_id;
-    TablesMarkedAsDropped::iterator table; 
+    TablesMarkedAsDropped::iterator table;
     {
         std::lock_guard lock(tables_marked_dropped_mutex);
         table = tables_marked_dropped.end();
@@ -955,7 +955,7 @@ void DatabaseCatalog::dequeueDroppedTableCleanup(StorageID table_id)
                 table = it;
                 break;
             }
-            
+
             if (it->table_id.table_name == table_id.table_name &&
                 it->table_id.table_name == table_id.table_name &&
                 it->drop_time > latest_drop_time)
@@ -1000,7 +1000,7 @@ void DatabaseCatalog::dequeueDroppedTableCleanup(StorageID table_id)
         enqueue();
         throw Exception(
             ErrorCodes::FS_METADATA_ERROR,
-            "Cannot parse metadata of table {} from {}", 
+            "Cannot parse metadata of table {} from {}",
             droped_table_id.getNameForLogs(),
             table_metadata_path);
     }
@@ -1026,7 +1026,7 @@ void DatabaseCatalog::dequeueDroppedTableCleanup(StorageID table_id)
         enqueue();
         throw Exception(
             ErrorCodes::FS_METADATA_ERROR,
-            "Cannot undrop table {} from {}", 
+            "Cannot undrop table {} from {}",
             droped_table_id.getNameForLogs(),
             table_metadata_path);
     }

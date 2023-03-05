@@ -6,12 +6,6 @@
 namespace DB
 {
 
-namespace ErrorCodes
-{
-    extern const int SYNTAX_ERROR;
-}
-
-
 String ASTUndropQuery::getID(char delim) const
 {
     return "UndropQuery" + (delim + getDatabase()) + delim + getTable();
