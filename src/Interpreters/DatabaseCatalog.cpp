@@ -959,7 +959,7 @@ void DatabaseCatalog::dequeueDroppedTableCleanup(StorageID table_id)
 
             if (it->table_id.table_name == table_id.table_name &&
                 it->table_id.table_name == table_id.table_name &&
-                it->drop_time > latest_drop_time)
+                it->drop_time >= latest_drop_time)
             {
                 latest_drop_time = it->drop_time;
                 table = it;
