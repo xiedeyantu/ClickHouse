@@ -26,10 +26,11 @@ void ASTUndropQuery::formatQueryImpl(const FormatSettings & settings, FormatStat
     settings.ostr << "TABLE ";
     settings.ostr << (settings.hilite ? hilite_none : "");
 
-    if (!table && database)
-        settings.ostr << backQuoteIfNeed(getDatabase());
+    assert (table);
+    if (!database)
+        settings.ostr << backQuoteIfNeed(getTable());
     else
-        settings.ostr << (database ? backQuoteIfNeed(getDatabase()) + "." : "") << backQuoteIfNeed(getTable());
+        settings.ostr << backQuoteIfNeed(getDatabase()) + "." << backQuoteIfNeed(getTable());
 
     formatOnCluster(settings);
 }

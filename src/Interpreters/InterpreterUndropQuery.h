@@ -20,8 +20,6 @@ public:
     /// Undrop table.
     BlockIO execute() override;
 
-    static void executeUnDropQuery(ContextPtr global_context, ContextPtr current_context, const StorageID & target_table_id);
-
 private:
     AccessRightsElements getRequiredAccessForDDLOnCluster() const;
     ASTPtr query_ptr;

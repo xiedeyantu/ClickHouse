@@ -20,6 +20,9 @@ bool parseUndropQuery(IParser::Pos & pos, ASTPtr & node, Expected & expected)
     ASTPtr database;
     ASTPtr table;
     String cluster_str;
+    /// We can specify the table's uuid for exact undrop.
+    /// because the same name of a table can be created and deleted multiple times,
+    /// and can generate multiple different uuids.
     UUID uuid = UUIDHelpers::Nil;
 
     if (!s_table.ignore(pos, expected))
@@ -55,8 +58,8 @@ bool parseUndropQuery(IParser::Pos & pos, ASTPtr & node, Expected & expected)
     if (database)
         query->children.push_back(database);
 
-    if (table)
-        query->children.push_back(table);
+    assert (table);
+    query->children.push_back(table);
 
     query->cluster = cluster_str;
 
@@ -67,9 +70,9 @@ bool parseUndropQuery(IParser::Pos & pos, ASTPtr & node, Expected & expected)
 
 bool ParserUndropQuery::parseImpl(Pos & pos, ASTPtr & node, Expected & expected)
 {
-    ParserKeyword s_drop("UNDROP");
+    ParserKeyword s_undrop("UNDROP");
 
-    if (s_drop.ignore(pos, expected))
+    if (s_undrop.ignore(pos, expected))
         return parseUndropQuery(pos, node, expected);
     else
         return false;

@@ -22,6 +22,7 @@ InterpreterUndropQuery::InterpreterUndropQuery(const ASTPtr & query_ptr_, Contex
 
 BlockIO InterpreterUndropQuery::execute()
 {
+    getContext()->checkAccess(AccessType::UNDROP_TABLE);
     auto & undrop = query_ptr->as<ASTUndropQuery &>();
     if (!undrop.cluster.empty() && !maybeRemoveOnCluster(query_ptr, getContext()))
     {
@@ -43,7 +44,10 @@ BlockIO InterpreterUndropQuery::executeToTable(ASTUndropQuery & query)
 
     auto context = getContext();
     if (table_id.database_name.empty())
-        query.setDatabase(table_id.database_name = context->getCurrentDatabase());
+    {
+        table_id.database_name = context->getCurrentDatabase();
+        query.setDatabase(table_id.database_name);
+    }
 
     auto database = DatabaseCatalog::instance().getDatabase(table_id.database_name);
     if (database->tryGetTable(table_id.table_name, context))

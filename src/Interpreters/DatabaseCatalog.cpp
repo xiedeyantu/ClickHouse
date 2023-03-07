@@ -943,7 +943,7 @@ void DatabaseCatalog::dequeueDroppedTableCleanup(StorageID table_id)
 {
     String latest_metadata_dropped_path;
     String table_metadata_path;
-    StorageID droped_table_id = table_id;
+    StorageID dropped_table_id = table_id;
     TablesMarkedAsDropped::iterator table;
     {
         std::lock_guard lock(tables_marked_dropped_mutex);
@@ -957,7 +957,7 @@ void DatabaseCatalog::dequeueDroppedTableCleanup(StorageID table_id)
                 break;
             }
 
-            if (it->table_id.table_name == table_id.table_name &&
+            if (it->table_id.database_name == table_id.database_name &&
                 it->table_id.table_name == table_id.table_name &&
                 it->drop_time >= latest_drop_time)
             {
@@ -968,27 +968,27 @@ void DatabaseCatalog::dequeueDroppedTableCleanup(StorageID table_id)
 
         if (table == tables_marked_dropped.end())
             throw Exception(ErrorCodes::UNKNOWN_TABLE,
-                "The drop task of table {} is in progress or has been dropped or has not metadata file, like Memory engine",
+                "The drop task of table {} is in progress, has been dropped or the database engine doesn't support it",
                 table_id.getNameForLogs());
 
         latest_metadata_dropped_path = table->metadata_path;
-        droped_table_id = table->table_id;
-        table_metadata_path = getPathForMetadata(droped_table_id);
-
-        tables_marked_dropped.erase(table);
-        if (tables_marked_dropped_ids.contains(droped_table_id.uuid))
-            tables_marked_dropped_ids.erase(droped_table_id.uuid);
+        dropped_table_id = table->table_id;
+        table_metadata_path = getPathForMetadata(dropped_table_id);
 
         fs::rename(latest_metadata_dropped_path, table_metadata_path);
+
+        tables_marked_dropped.erase(table);
+        if (tables_marked_dropped_ids.contains(dropped_table_id.uuid))
+            tables_marked_dropped_ids.erase(dropped_table_id.uuid);
     }
 
-    LOG_INFO(log, "Trying Undrop table {} from {}", droped_table_id.getNameForLogs(), latest_metadata_dropped_path);
+    LOG_INFO(log, "Trying Undrop table {} from {}", dropped_table_id.getNameForLogs(), latest_metadata_dropped_path);
 
     auto enqueue = [&]()
     {
         std::lock_guard lock(tables_marked_dropped_mutex);
         tables_marked_dropped.emplace_back(*table);
-        tables_marked_dropped_ids.insert(droped_table_id.uuid);
+        tables_marked_dropped_ids.insert(dropped_table_id.uuid);
         CurrentMetrics::add(CurrentMetrics::TablesToDropQueueSize, 1);
     };
 
@@ -1002,24 +1002,24 @@ void DatabaseCatalog::dequeueDroppedTableCleanup(StorageID table_id)
         throw Exception(
             ErrorCodes::FS_METADATA_ERROR,
             "Cannot parse metadata of table {} from {}",
-            droped_table_id.getNameForLogs(),
+            dropped_table_id.getNameForLogs(),
             table_metadata_path);
     }
 
-    String data_path = "store/" + getPathForUUID(droped_table_id.uuid);
-    create->setDatabase(droped_table_id.database_name);
-    create->setTable(droped_table_id.table_name);
+    String data_path = "store/" + getPathForUUID(dropped_table_id.uuid);
+    create->setDatabase(dropped_table_id.database_name);
+    create->setTable(dropped_table_id.table_name);
     try
     {
         auto storage = createTableFromAST(
             *create,
-            droped_table_id.getDatabaseName(),
+            dropped_table_id.getDatabaseName(),
             data_path,
             local_context,
             /* force_restore */ true).second;
 
-        auto database = getDatabase(droped_table_id.database_name, local_context);
-        database->attachTable(local_context, droped_table_id.table_name, storage, database->getTableDataPath(*create));
+        auto database = getDatabase(dropped_table_id.database_name, local_context);
+        database->attachTable(local_context, dropped_table_id.table_name, storage, database->getTableDataPath(*create));
         CurrentMetrics::sub(CurrentMetrics::TablesToDropQueueSize, 1);
     }
     catch (...)
@@ -1028,7 +1028,7 @@ void DatabaseCatalog::dequeueDroppedTableCleanup(StorageID table_id)
         throw Exception(
             ErrorCodes::FS_METADATA_ERROR,
             "Cannot undrop table {} from {}",
-            droped_table_id.getNameForLogs(),
+            dropped_table_id.getNameForLogs(),
             table_metadata_path);
     }
 }
