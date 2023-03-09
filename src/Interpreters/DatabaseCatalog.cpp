@@ -942,7 +942,6 @@ void DatabaseCatalog::enqueueDroppedTableCleanup(StorageID table_id, StoragePtr 
 void DatabaseCatalog::dequeueDroppedTableCleanup(StorageID table_id)
 {
     String latest_metadata_dropped_path;
-    String table_metadata_path;
     StorageID dropped_table_id = table_id;
     TablesMarkedAsDropped::iterator table;
     {
@@ -973,28 +972,26 @@ void DatabaseCatalog::dequeueDroppedTableCleanup(StorageID table_id)
 
         latest_metadata_dropped_path = table->metadata_path;
         dropped_table_id = table->table_id;
-        table_metadata_path = getPathForMetadata(dropped_table_id);
-
-        fs::rename(latest_metadata_dropped_path, table_metadata_path);
 
         tables_marked_dropped.erase(table);
-        if (tables_marked_dropped_ids.contains(dropped_table_id.uuid))
-            tables_marked_dropped_ids.erase(dropped_table_id.uuid);
+        tables_marked_dropped_ids.erase(dropped_table_id.uuid);
     }
 
     LOG_INFO(log, "Trying Undrop table {} from {}", dropped_table_id.getNameForLogs(), latest_metadata_dropped_path);
+    String table_metadata_path = getPathForMetadata(dropped_table_id);
 
     auto enqueue = [&]()
     {
         std::lock_guard lock(tables_marked_dropped_mutex);
         tables_marked_dropped.emplace_back(*table);
         tables_marked_dropped_ids.insert(dropped_table_id.uuid);
+        fs::remove(table_metadata_path);
         CurrentMetrics::add(CurrentMetrics::TablesToDropQueueSize, 1);
     };
 
     auto local_context = getContext();
     ASTPtr ast = DatabaseOnDisk::parseQueryFromMetadata(
-        log, local_context, table_metadata_path, /*throw_on_error*/ true, /*remove_empty*/ false);
+        log, local_context, latest_metadata_dropped_path, /*throw_on_error*/ true, /*remove_empty*/ false);
     auto * create = typeid_cast<ASTCreateQuery *>(ast.get());
     if (!create)
     {
@@ -1003,7 +1000,7 @@ void DatabaseCatalog::dequeueDroppedTableCleanup(StorageID table_id)
             ErrorCodes::FS_METADATA_ERROR,
             "Cannot parse metadata of table {} from {}",
             dropped_table_id.getNameForLogs(),
-            table_metadata_path);
+            latest_metadata_dropped_path);
     }
 
     String data_path = "store/" + getPathForUUID(dropped_table_id.uuid);
@@ -1020,6 +1017,7 @@ void DatabaseCatalog::dequeueDroppedTableCleanup(StorageID table_id)
 
         auto database = getDatabase(dropped_table_id.database_name, local_context);
         database->attachTable(local_context, dropped_table_id.table_name, storage, database->getTableDataPath(*create));
+        fs::rename(latest_metadata_dropped_path, table_metadata_path);
         CurrentMetrics::sub(CurrentMetrics::TablesToDropQueueSize, 1);
     }
     catch (...)
