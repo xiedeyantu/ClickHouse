@@ -21,7 +21,6 @@
 #include <Common/checkStackSize.h>
 
 #include "config.h"
-#include <regex>
 
 #if USE_MYSQL
 #    include <Databases/MySQL/MaterializedMySQLSyncThread.h>
@@ -974,7 +973,8 @@ void DatabaseCatalog::dequeueDroppedTableCleanup(StorageID table_id)
         dropped_table_id = table->table_id;
 
         tables_marked_dropped.erase(table);
-        tables_marked_dropped_ids.erase(dropped_table_id.uuid);
+        [[maybe_unused]] auto removed = tables_marked_dropped_ids.erase(dropped_table_id.uuid);
+        assert(removed);
     }
 
     LOG_INFO(log, "Trying Undrop table {} from {}", dropped_table_id.getNameForLogs(), latest_metadata_dropped_path);
