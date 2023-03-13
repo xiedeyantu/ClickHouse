@@ -237,7 +237,7 @@ def test_undrop_drop_and_undrop_loop(started_cluster):
             + count.__str__()
             + " UUID '"
             + table_uuid
-            + "' (id Int32) Engine=MergeTree() order by id;"        
+            + "' (id Int32) Engine=MergeTree() order by id;"
         )
         node3.query("drop table test_25338_undrop_loop" + count.__str__() + ";")
         time.sleep(random_sec)
@@ -248,7 +248,7 @@ def test_undrop_drop_and_undrop_loop(started_cluster):
                 + " uuid '"
                 + table_uuid
                 + "';"
-            )            
+            )
             assert "UNKNOWN_TABLE" in error
         else:
             node3.query(
