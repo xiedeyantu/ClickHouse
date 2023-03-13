@@ -1,4 +1,8 @@
 import pytest
+import uuid
+import random
+import logging
+import time
 
 from helpers.cluster import ClickHouseCluster
 
@@ -9,6 +13,9 @@ node1 = cluster.add_instance(
 )
 node2 = cluster.add_instance(
     "node2", main_configs=["configs/remote_servers.xml"], with_zookeeper=True
+)
+node3 = cluster.add_instance(
+    "node3", main_configs=["configs/with_delay_config.xml"]
 )
 
 
@@ -58,7 +65,7 @@ def test_undrop_MergeTree_with_uuid(started_cluster):
         )
         == "1\n"
     )
-    node1.query("undrop table test_25338_undrop;")
+    node1.query("undrop table test_25338_undrop UUID '3719b97a-fc7c-4bb1-84c0-a9906006fb88';")
     assert (
         node1.query(
             "select value from system.metrics where metric = 'TablesToDropQueueSize';"
@@ -215,3 +222,22 @@ def test_undrop_drop_and_undrop_multiple_times(started_cluster):
     error = node1.query_and_get_error("undrop table test_25338_undrop;")
     assert "TABLE_ALREADY_EXISTS" in error
     node1.query("drop table test_25338_undrop sync;")
+
+
+def test_undrop_drop_and_undrop_loop(started_cluster):
+    count = 0
+    while (count < 10):
+        random_sec = random.randint(0,10)
+        table_uuid = uuid.uuid1().__str__()
+        logging.info("random_sec: " + random_sec.__str__() + ", table_uuid: " + table_uuid)
+        node3.query(
+            "create table test_25338_undrop_loop" + count.__str__() + " UUID '" + table_uuid + "' (id Int32) Engine=MergeTree() order by id;"
+        )
+        node3.query("drop table test_25338_undrop_loop" + count.__str__() + ";")
+        time.sleep(random_sec)
+        if random_sec >= 5:
+            error = node3.query_and_get_error("undrop table test_25338_undrop_loop" + count.__str__() + " uuid '" + table_uuid + "';")
+            assert "UNKNOWN_TABLE" in error
+        else:
+            node3.query("undrop table test_25338_undrop_loop" + count.__str__() + " UUID '" + table_uuid + "';")
+        count = count + 1
