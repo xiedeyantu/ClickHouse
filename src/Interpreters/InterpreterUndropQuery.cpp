@@ -50,10 +50,11 @@ BlockIO InterpreterUndropQuery::executeToTable(ASTUndropQuery & query)
     }
 
     auto database = DatabaseCatalog::instance().getDatabase(table_id.database_name);
-    if (database->tryGetTable(table_id.table_name, context))
-        throw Exception(ErrorCodes::TABLE_ALREADY_EXISTS,
-        "Cannot Undrop table {}, it already exist",
-        table_id.getNameForLogs());
+    if (database->isTableExist(table_id.table_name, getContext()))
+        throw Exception(
+            ErrorCodes::TABLE_ALREADY_EXISTS, "Cannot Undrop table, {}.{} already exists", backQuote(table_id.database_name), backQuote(table_id.table_name));
+
+    database->checkMetadataFilenameAvailability(table_id.table_name);
 
     DatabaseCatalog::instance().dequeueDroppedTableCleanup(table_id);
     return {};

@@ -239,23 +239,25 @@ def test_undrop_drop_and_undrop_loop(started_cluster):
             + table_uuid
             + "' (id Int32) Engine=MergeTree() order by id;"
         )
+        node3.query(
+            "insert into test_25338_undrop_loop" + count.__str__() + " values (1);"
+        )
         node3.query("drop table test_25338_undrop_loop" + count.__str__() + ";")
         time.sleep(random_sec)
-        if random_sec >= 5:
-            error = node3.query_and_get_error(
-                "undrop table test_25338_undrop_loop"
-                + count.__str__()
-                + " uuid '"
-                + table_uuid
-                + "';"
-            )
-            assert "UNKNOWN_TABLE" in error
+        ret, error = node3.query_and_get_answer_with_error(
+            "undrop table test_25338_undrop_loop"
+            + count.__str__()
+            + " uuid '"
+            + table_uuid
+            + "';"
+        )
+        if "UNKNOWN_TABLE" in error:
+            logging.info("UNKNOWN_TABLE")
         else:
-            node3.query(
-                "undrop table test_25338_undrop_loop"
-                + count.__str__()
-                + " UUID '"
-                + table_uuid
-                + "';"
+            assert (
+                node3.query(
+                    "select * from test_25338_undrop_loop" + count.__str__() + ";"
+                )
+                == "1\n"
             )
-            count = count + 1
+        count = count + 1

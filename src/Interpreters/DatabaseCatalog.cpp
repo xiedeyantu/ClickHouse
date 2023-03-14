@@ -942,82 +942,70 @@ void DatabaseCatalog::dequeueDroppedTableCleanup(StorageID table_id)
 {
     String latest_metadata_dropped_path;
     StorageID dropped_table_id = table_id;
-    TablesMarkedAsDropped::iterator table;
+    TableMarkedAsDropped dropped_table;
     {
         std::lock_guard lock(tables_marked_dropped_mutex);
-        table = tables_marked_dropped.end();
         time_t latest_drop_time = std::numeric_limits<time_t>::min();
+        auto it_table = tables_marked_dropped.end();
         for (auto it = tables_marked_dropped.begin(); it != tables_marked_dropped.end(); ++it)
         {
+            auto storage_ptr = it->table;
             if (it->table_id.uuid == table_id.uuid)
             {
-                table = it;
+                it_table = it;
+                dropped_table = *it;
                 break;
             }
+
+            /// If table uuid exists, only find tables with equal uuid.
+            if (table_id.uuid != UUIDHelpers::Nil)
+                continue;
 
             if (it->table_id.database_name == table_id.database_name &&
                 it->table_id.table_name == table_id.table_name &&
                 it->drop_time >= latest_drop_time)
             {
                 latest_drop_time = it->drop_time;
-                table = it;
+                it_table = it;
+                dropped_table = *it;
             }
         }
 
-        if (table == tables_marked_dropped.end())
+        if (it_table == tables_marked_dropped.end())
             throw Exception(ErrorCodes::UNKNOWN_TABLE,
                 "The drop task of table {} is in progress, has been dropped or the database engine doesn't support it",
                 table_id.getNameForLogs());
 
-        latest_metadata_dropped_path = table->metadata_path;
-        dropped_table_id = table->table_id;
+        latest_metadata_dropped_path = it_table->metadata_path;
+        dropped_table_id = it_table->table_id;
 
-        tables_marked_dropped.erase(table);
+        tables_marked_dropped.erase(it_table);
         [[maybe_unused]] auto removed = tables_marked_dropped_ids.erase(dropped_table_id.uuid);
         assert(removed);
     }
 
+    /// Remove the table from tables_marked_dropped and tables_marked_dropped_ids,
+    /// and the drop task for this table will no longer be scheduled.
     LOG_INFO(log, "Trying Undrop table {} from {}", dropped_table_id.getNameForLogs(), latest_metadata_dropped_path);
     String table_metadata_path = getPathForMetadata(dropped_table_id);
 
     auto enqueue = [&]()
     {
         std::lock_guard lock(tables_marked_dropped_mutex);
-        tables_marked_dropped.emplace_back(*table);
+        tables_marked_dropped.emplace_back(dropped_table);
         tables_marked_dropped_ids.insert(dropped_table_id.uuid);
-        fs::remove(table_metadata_path);
         CurrentMetrics::add(CurrentMetrics::TablesToDropQueueSize, 1);
     };
 
-    auto local_context = getContext();
-    ASTPtr ast = DatabaseOnDisk::parseQueryFromMetadata(
-        log, local_context, latest_metadata_dropped_path, /*throw_on_error*/ true, /*remove_empty*/ false);
-    auto * create = typeid_cast<ASTCreateQuery *>(ast.get());
-    if (!create)
-    {
-        enqueue();
-        throw Exception(
-            ErrorCodes::FS_METADATA_ERROR,
-            "Cannot parse metadata of table {} from {}",
-            dropped_table_id.getNameForLogs(),
-            latest_metadata_dropped_path);
-    }
-
-    String data_path = "store/" + getPathForUUID(dropped_table_id.uuid);
-    create->setDatabase(dropped_table_id.database_name);
-    create->setTable(dropped_table_id.table_name);
     try
     {
-        auto storage = createTableFromAST(
-            *create,
-            dropped_table_id.getDatabaseName(),
-            data_path,
-            local_context,
-            /* force_restore */ true).second;
-
-        auto database = getDatabase(dropped_table_id.database_name, local_context);
-        database->attachTable(local_context, dropped_table_id.table_name, storage, database->getTableDataPath(*create));
-        fs::rename(latest_metadata_dropped_path, table_metadata_path);
+        /// table_marked.table should be unique.
+        assert(dropped_table.table.unique());
+        dropped_table.table->is_dropped = false;
+        auto database = getDatabase(dropped_table_id.database_name, getContext());
+        database->attachTable(getContext(), dropped_table_id.table_name, dropped_table.table,
+            fs::path(database->getDataPath()) / DatabaseCatalog::instance().getPathForUUID(dropped_table.table_id.uuid));
+        renameNoReplace(latest_metadata_dropped_path, table_metadata_path);
         CurrentMetrics::sub(CurrentMetrics::TablesToDropQueueSize, 1);
     }
     catch (...)

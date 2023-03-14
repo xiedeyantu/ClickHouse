@@ -32,6 +32,10 @@ void ASTUndropQuery::formatQueryImpl(const FormatSettings & settings, FormatStat
     else
         settings.ostr << backQuoteIfNeed(getDatabase()) + "." << backQuoteIfNeed(getTable());
 
+    if (uuid != UUIDHelpers::Nil)
+        settings.ostr << (settings.hilite ? hilite_keyword : "") << " UUID " << (settings.hilite ? hilite_none : "")
+            << quoteString(toString(uuid));
+
     formatOnCluster(settings);
 }
 
