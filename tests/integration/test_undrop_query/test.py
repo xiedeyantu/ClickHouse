@@ -68,6 +68,7 @@ def test_undrop_MergeTree(started_cluster):
     node1.query("drop table test_25338_undrop sync;")
 
 
+
 def test_undrop_MergeTree_with_uuid(started_cluster):
     node1.query(
         "create table test_25338_undrop UUID '3719b97a-fc7c-4bb1-84c0-a9906006fb88' (id Int32) Engine=MergeTree() order by id;"
