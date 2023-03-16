@@ -1010,7 +1010,7 @@ void DatabaseCatalog::dequeueDroppedTableCleanup(StorageID table_id)
         enqueue();
         throw Exception(
             ErrorCodes::FS_METADATA_ERROR,
-            "Cannot parse metadata of table {} from {}", 
+            "Cannot parse metadata of table {} from {}",
             dropped_table_id.getNameForLogs(),
             table_metadata_path);
     }

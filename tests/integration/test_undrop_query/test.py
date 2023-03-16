@@ -58,8 +58,14 @@ def test_undrop_MergeTree(started_cluster):
         )
         == "UPDATE num = 2 WHERE id = 1\n"
     )
+    # check detach
+    node1.query("detach table test_25338_undrop;")
+    error = node1.query_and_get_error(
+        "undrop table test_25338_undrop settings allow_experimental_undrop_table_query = 1;"
+    )
+    assert "TABLE_ALREADY_EXISTS" in error
+    node1.query("attach table test_25338_undrop;")
     node1.query("drop table test_25338_undrop sync;")
-
 
 
 def test_undrop_MergeTree_with_uuid(started_cluster):
